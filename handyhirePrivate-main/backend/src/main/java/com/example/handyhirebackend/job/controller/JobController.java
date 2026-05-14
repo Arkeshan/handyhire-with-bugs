@@ -1,5 +1,6 @@
 package com.example.handyhirebackend.job.controller;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import com.example.handyhirebackend.job.model.Bid;
 import com.example.handyhirebackend.job.model.Job;
 import com.example.handyhirebackend.job.service.JobService;
@@ -16,6 +17,7 @@ public class JobController {
 
     @Autowired
     private JobService jobService;
+    @Autowired private SimpMessagingTemplate messagingTemplate;
 
     // ──── Job CRUD ────────────────────────────────────────────────────────────
 
@@ -24,7 +26,9 @@ public class JobController {
             @RequestBody Job job,
             @RequestParam Long customerId) {
         job.setCustomerId(customerId);
-        return ResponseEntity.ok(jobService.createJob(job));
+        Job savedJob = jobService.createJob(job);
+        messagingTemplate.convertAndSend("/topic/jobs" + savedJob.getCategory(), savedJob);
+        return ResponseEntity.ok(savedJob);
     }
 
     @GetMapping("/{id}")

@@ -16,6 +16,7 @@ dependencies:
   http: ^1.6.0
   shared_preferences: ^2.5.5
   file_picker: ^8.0.0
+  stomp_dart_client: ^3.0.1
 
 dev_dependencies:
   flutter_test:

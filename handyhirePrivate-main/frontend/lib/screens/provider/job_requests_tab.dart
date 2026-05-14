@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/app_colors.dart';
 import '../../services/api_service.dart';
 import 'job_request_detail_screen.dart';
+import 'dart:convert';
+import 'package:stomp_dart_client/stomp_dart_client.dart';
 
 class JobRequestsScreen extends StatefulWidget {
   const JobRequestsScreen({super.key});
@@ -14,11 +16,69 @@ class JobRequestsScreen extends StatefulWidget {
 class _JobRequestsScreenState extends State<JobRequestsScreen> {
   List<dynamic> _jobs = [];
   bool _isLoading = true;
+  
+  // NEW: Store the skill at the class level so the WebSocket can use it
+  String _mySkill = "General"; 
+  
+  // NEW: This is the "phone" that will stay connected to the server
+  StompClient? stompClient; 
 
   @override
   void initState() {
     super.initState();
-    _fetchBroadcastedJobs();
+    // NEW: We change this to a setup function to do things in order
+    _initializeScreen(); 
+  }
+
+  // NEW: Setup function
+  Future<void> _initializeScreen() async {
+    await _fetchBroadcastedJobs(); // 1. Get existing jobs from database
+    _connectWebSocket();           // 2. Start listening for brand new jobs
+  }
+
+  // NEW: The WebSocket connection logic
+  void _connectWebSocket() {
+    stompClient = StompClient(
+      config: StompConfig(
+        // IMPORTANT IP ADDRESS NOTE:
+        // If using an Android Emulator, use '10.0.2.2' instead of 'localhost'
+        // If using a physical phone, use your computer's actual WiFi IP (e.g., 192.168.1.5)
+        url: 'ws://10.0.2.2:8080/ws-handyhire/websocket', 
+        onConnect: onWebSocketConnected,
+        onWebSocketError: (dynamic error) => print("WebSocket Error: $error"),
+      ),
+    );
+    stompClient!.activate(); // "Picks up the phone"
+  }
+
+  // NEW: What to do when the phone connects
+  void onWebSocketConnected(StompFrame frame) {
+    print("Connected to live jobs! Listening for: $_mySkill");
+    
+    // "Tune in" to the specific radio station for this provider's skill
+    stompClient!.subscribe(
+      destination: '/topic/jobs/$_mySkill',
+      callback: (StompFrame frame) {
+        if (frame.body != null) {
+          // A new job arrived! Decode it from text to a Dart Map
+          final newJob = json.decode(frame.body!);
+          
+          if (mounted) {
+            setState(() {
+              // Add the new job to the VERY TOP of the list (index 0)
+              _jobs.insert(0, newJob);
+            });
+          }
+        }
+      },
+    );
+  }
+
+  // NEW: ALWAYS hang up the phone when the user leaves this screen!
+  @override
+  void dispose() {
+    stompClient?.deactivate(); 
+    super.dispose();
   }
 
   Future<void> _fetchBroadcastedJobs() async {
@@ -27,15 +87,13 @@ class _JobRequestsScreenState extends State<JobRequestsScreen> {
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('email') ?? "";
 
-      // 1. Get the provider's actual skill/profession from their profile
       final profile = await ApiService.instance.getProfile(email);
-      final mySkill = profile['profession'] ?? profile['skills'] ?? "General";
+      // NEW: Update the class-level variable here
+      _mySkill = profile['profession'] ?? profile['skills'] ?? "General";
 
-      // 2. Fetch jobs matching that category from Spring Boot
-      final response = await ApiService.instance.getOpenJobs(category: mySkill);
+      final response = await ApiService.instance.getOpenJobs(category: _mySkill);
 
       setState(() {
-        // Handles if backend returns data wrapped in a 'data' key or as a raw list
         final raw = response['data'] ?? response;
         _jobs = raw is List ? raw : [];
         _isLoading = false;
