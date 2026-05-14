@@ -1,0 +1,35 @@
+package com.example.handyhirebackend.auth.model;
+
+public class RegisterRequest {
+    private String name;
+    private String email;
+    private String password;
+    private String role;
+    private String phone;
+    private String profession;
+    private Integer experience;
+// Add these fields to your existing variables
+    private String idProofName;
+    private String certificationName;
+
+    // Add these Getters and Setters at the bottom
+    public String getIdProofName() { return idProofName; }
+    public void setIdProofName(String idProofName) { this.idProofName = idProofName; }
+    public String getProfession() { return profession; }
+    public void setProfession(String profession) { this.profession = profession; }
+    
+    public Integer getExperience() { return experience; }
+    public void setExperience(Integer experience) { this.experience = experience; }
+    public String getCertificationName() { return certificationName; }
+    public void setCertificationName(String certificationName) { this.certificationName = certificationName; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    public String getRole() { return role; }
+    public void setRole(String role) { this.role = role; }
+    public String getPhone() { return phone; }
+    public void setPhone(String phone) { this.phone = phone; }
+}

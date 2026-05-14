@@ -1,0 +1,105 @@
+#!/bin/sh
+# Maven Wrapper for Mac/Linux — auto-downloads Maven if not present
+
+set -euf
+[ "${MVNW_VERBOSE-}" != debug ] || set -x
+
+native_path() { printf %s\\n "$1"; }
+case "$(uname)" in
+CYGWIN* | MINGW*)
+  [ -z "${JAVA_HOME-}" ] || JAVA_HOME="$(cygpath --unix "$JAVA_HOME")"
+  native_path() { cygpath --path --windows "$1"; }
+  ;;
+esac
+
+set_java_home() {
+  if [ -n "${JAVA_HOME-}" ]; then
+    if [ -x "$JAVA_HOME/jre/sh/java" ]; then
+      JAVACMD="$JAVA_HOME/jre/sh/java"
+    else
+      JAVACMD="$JAVA_HOME/bin/java"
+      if [ ! -x "$JAVACMD" ]; then
+        echo "JAVA_HOME is set but java not found at $JAVACMD" >&2
+        return 1
+      fi
+    fi
+  else
+    JAVACMD="$(command -v java)" || :
+    if [ ! -x "${JAVACMD-}" ]; then
+      echo "java not found in PATH. Please install Java 21." >&2
+      return 1
+    fi
+  fi
+}
+
+hash_string() {
+  str="${1:-}" h=0
+  while [ -n "$str" ]; do
+    char="${str%"${str#?}"}"
+    h=$(((h * 31 + $(LC_CTYPE=C printf %d "'$char")) % 4294967296))
+    str="${str#?}"
+  done
+  printf %x\\n $h
+}
+
+die() { printf %s\\n "$1" >&2; exit 1; }
+
+scriptDir="$(dirname "$0")"
+
+# Read distributionUrl from properties
+while IFS="=" read -r key value; do
+  case "${key-}" in
+  distributionUrl) distributionUrl=$(printf %s\\n "${value-}" | tr -d ' \r') ;;
+  esac
+done < "$scriptDir/.mvn/wrapper/maven-wrapper.properties"
+[ -n "${distributionUrl-}" ] || die "cannot read distributionUrl from .mvn/wrapper/maven-wrapper.properties"
+
+distributionUrlName="${distributionUrl##*/}"
+distributionUrlNameMain="${distributionUrlName%.*}"
+distributionUrlNameMain="${distributionUrlNameMain%-bin}"
+
+MAVEN_USER_HOME="${MAVEN_USER_HOME:-${HOME}/.m2}"
+MAVEN_HOME="${MAVEN_USER_HOME}/wrapper/dists/${distributionUrlNameMain}/$(hash_string "$distributionUrl")"
+
+exec_maven() {
+  exec "$MAVEN_HOME/bin/mvn" "$@" || die "cannot exec $MAVEN_HOME/bin/mvn"
+}
+
+if [ -d "$MAVEN_HOME" ]; then
+  exec_maven "$@"
+fi
+
+mkdir -p "${MAVEN_HOME%/*}"
+
+if TMP_DOWNLOAD_DIR="$(mktemp -d)" && [ -d "$TMP_DOWNLOAD_DIR" ]; then
+  clean() { rm -rf -- "$TMP_DOWNLOAD_DIR"; }
+  trap clean HUP INT TERM EXIT
+else
+  die "cannot create temp dir"
+fi
+
+echo "Downloading Maven (first run only, please wait)..."
+
+if command -v wget >/dev/null; then
+  wget -q "$distributionUrl" -O "$TMP_DOWNLOAD_DIR/$distributionUrlName" || die "wget failed"
+elif command -v curl >/dev/null; then
+  curl -f -L -s -o "$TMP_DOWNLOAD_DIR/$distributionUrlName" "$distributionUrl" || die "curl failed"
+else
+  die "Neither wget nor curl found. Please install one."
+fi
+
+if command -v unzip >/dev/null; then
+  unzip -q "$TMP_DOWNLOAD_DIR/$distributionUrlName" -d "$TMP_DOWNLOAD_DIR" || die "unzip failed"
+else
+  tar xzf "$TMP_DOWNLOAD_DIR/$distributionUrlName" -C "$TMP_DOWNLOAD_DIR" || die "tar failed"
+fi
+
+actualDir=""
+for dir in "$TMP_DOWNLOAD_DIR"/*; do
+  [ -d "$dir" ] && [ -f "$dir/bin/mvn" ] && actualDir="$(basename "$dir")" && break
+done
+[ -n "$actualDir" ] || die "Could not find Maven in extracted archive"
+
+mv -- "$TMP_DOWNLOAD_DIR/$actualDir" "$MAVEN_HOME" || [ -d "$MAVEN_HOME" ] || die "failed to move Maven"
+clean || :
+exec_maven "$@"
