@@ -22,64 +22,34 @@ class _JobRequestsScreenState extends State<JobRequestsScreen> {
   }
 
   Future<void> _fetchBroadcastedJobs() async {
+    setState(() => _isLoading = true);
     try {
       final prefs = await SharedPreferences.getInstance();
       final email = prefs.getString('email') ?? "";
 
-      // 1. Get the real skill from the profile
+      // 1. Get the provider's actual skill/profession from their profile
       final profile = await ApiService.instance.getProfile(email);
-      final mySkill = profile['skills'] ?? "General";
+      final mySkill = profile['profession'] ?? profile['skills'] ?? "General";
 
-      // 2. Fetch jobs for that skill
+      // 2. Fetch jobs matching that category from Spring Boot
       final response = await ApiService.instance.getOpenJobs(category: mySkill);
-      
+
       setState(() {
-        _jobs = response['data'] ?? [];
+        // Handles if backend returns data wrapped in a 'data' key or as a raw list
+        final raw = response['data'] ?? response;
+        _jobs = raw is List ? raw : [];
         _isLoading = false;
       });
     } catch (e) {
+      print("Error fetching jobs: $e");
       setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator(color: AppColors.accent));
-    
-    return RefreshIndicator(
-      onRefresh: _fetchBroadcastedJobs,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(20),
-        itemCount: _jobs.length,
-        itemBuilder: (context, index) {
-          final job = _jobs[index];
-          return JobCard(
-            title: job['title'] ?? 'Task',
-            customer: job['customerName'] ?? 'Unknown',
-            price: "Rs. ${job['budget'] ?? '0'}",
-            onTap: () => Navigator.push(context, MaterialPageRoute(
-              builder: (_) => JobRequestDetailScreen(job: job, jobIndex: index)
-            )),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class JobCard extends StatelessWidget {
-  final String title;
-  final String customer;
-  final String price;
-  final VoidCallback onTap;
-
-  const JobCard({super.key, required this.title, required this.customer, required this.price, required this.onTap});
-
-@override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      // 1. ADDED THE HEADER BACK
       appBar: AppBar(
         backgroundColor: AppColors.background,
         elevation: 0,
@@ -95,55 +65,121 @@ class JobCard extends StatelessWidget {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.accent),
+            )
           : _jobs.isEmpty
-              // 2. ADDED THE "NO REQUESTS" MESSAGE
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
-                        Icons.assignment_late_outlined, 
-                        size: 60, 
-                        color: AppColors.text.withOpacity(0.2)
+                        Icons.assignment_late_outlined,
+                        size: 60,
+                        color: AppColors.text.withOpacity(0.2),
                       ),
                       const SizedBox(height: 16),
-                      Text(
+                      const Text(
                         'No new requests in your category.',
-                        style: TextStyle(
-                          color: AppColors.text.withOpacity(0.5), 
-                          fontSize: 16
-                        ),
+                        style: TextStyle(color: Colors.white70, fontSize: 16),
                       ),
                       const SizedBox(height: 8),
                       TextButton(
                         onPressed: _fetchBroadcastedJobs,
-                        child: const Text("Tap to Refresh", style: TextStyle(color: AppColors.accent)),
-                      )
+                        child: const Text(
+                          "Tap to Refresh",
+                          style: TextStyle(color: AppColors.accent),
+                        ),
+                      ),
                     ],
                   ),
                 )
               : RefreshIndicator(
                   onRefresh: _fetchBroadcastedJobs,
                   child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
                     itemCount: _jobs.length,
                     itemBuilder: (context, index) {
                       final job = _jobs[index];
                       return JobCard(
                         title: job['title'] ?? 'Task',
-                        customer: job['customerName'] ?? 'Unknown',
-                        price: "Rs. ${job['budget'] ?? '0'}",
+                        customer:
+                            job['customerName'] ?? job['userName'] ?? 'Unknown',
+                        price: "Rs. ${job['budget'] ?? job['price'] ?? '0'}",
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => JobRequestDetailScreen(job: job, jobIndex: index),
+                            builder: (_) => JobRequestDetailScreen(
+                              job: job,
+                              jobIndex: index,
+                            ),
                           ),
                         ),
                       );
                     },
                   ),
                 ),
+    );
+  }
+}
+
+// ── Reusable JobCard widget ───────────────────────────────────────────────────
+
+class JobCard extends StatelessWidget {
+  final String title;
+  final String customer;
+  final String price;
+  final VoidCallback onTap;
+
+  const JobCard({
+    super.key,
+    required this.title,
+    required this.customer,
+    required this.price,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFF1E355B),
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        subtitle: Text(
+          "Customer: $customer",
+          style: const TextStyle(color: Colors.white70),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              price,
+              style: const TextStyle(
+                color: Color(0xFFB18E44),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: AppColors.accent,
+              size: 14,
+            ),
+          ],
+        ),
+        onTap: onTap,
+      ),
     );
   }
 }

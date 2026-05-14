@@ -1,144 +1,150 @@
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../../utils/app_colors.dart';
-import '../../services/api_service.dart';
-import 'job_request_detail_screen.dart';
+package com.example.handyhirebackend.job.controller;
 
-class JobRequestsScreen extends StatefulWidget {
-  const JobRequestsScreen({super.key});
+import com.example.handyhirebackend.job.model.Bid;
+import com.example.handyhirebackend.job.model.Job;
+import com.example.handyhirebackend.job.service.JobService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
 
-  @override
-  State<JobRequestsScreen> createState() => _JobRequestsScreenState();
-}
+import java.util.List;
+import java.util.Map;
 
-class _JobRequestsScreenState extends State<JobRequestsScreen> {
-  List<dynamic> _jobs = [];
-  bool _isLoading = true;
+@RestController
+@RequestMapping("/api/jobs")
+public class JobController {
 
-  @override
-  void initState() {
-    super.initState();
-    _fetchBroadcastedJobs();
-  }
+    @Autowired
+    private JobService jobService;
 
-  Future<void> _fetchBroadcastedJobs() async {
-    setState(() => _isLoading = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final email = prefs.getString('email') ?? "";
+    // ──── Job CRUD ────────────────────────────────────────────────────────────
 
-      // 1. Get the provider's actual skill/profession from their profile
-      final profile = await ApiService.instance.getProfile(email);
-      final mySkill = profile['profession'] ?? profile['skills'] ?? "General";
-
-      // 2. Fetch jobs matching that category from Spring Boot
-      final response = await ApiService.instance.getOpenJobs(category: mySkill);
-      
-      setState(() {
-        // Handles if backend returns data wrapped in a 'data' key or as a raw list
-        _jobs = response['data'] ?? (response is List ? response : []); 
-        _isLoading = false;
-      });
-    } catch (e) {
-      print("Error fetching jobs: $e");
-      setState(() => _isLoading = false);
+    @PostMapping
+    public ResponseEntity<Job> createJob(
+            @RequestBody Job job,
+            @RequestParam Long customerId) {
+        job.setCustomerId(customerId);
+        return ResponseEntity.ok(jobService.createJob(job));
     }
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        title: const Text(
-          'Job Requests',
-          style: TextStyle(color: AppColors.text, fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-          : _jobs.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.assignment_late_outlined, size: 60, color: AppColors.text.withOpacity(0.2)),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No new requests in your category.',
-                        style: TextStyle(color: Colors.white70, fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: _fetchBroadcastedJobs,
-                        child: const Text("Tap to Refresh", style: TextStyle(color: AppColors.accent)),
-                      )
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _fetchBroadcastedJobs,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: _jobs.length,
-                    itemBuilder: (context, index) {
-                      final job = _jobs[index];
-                      return JobCard(
-                        title: job['title'] ?? 'Task',
-                        customer: job['customerName'] ?? job['userName'] ?? 'Unknown',
-                        price: "Rs. ${job['budget'] ?? job['price'] ?? '0'}",
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => JobRequestDetailScreen(job: job, jobIndex: index),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-    );
-  }
-}
+    @GetMapping("/{id}")
+    public ResponseEntity<Job> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(jobService.getJobById(id));
+    }
 
-// Reusable JobCard Widget - Kept separate from the logic class
-class JobCard extends StatelessWidget {
-  final String title;
-  final String customer;
-  final String price;
-  final VoidCallback onTap;
+    @GetMapping
+    public ResponseEntity<List<Job>> getAll() {
+        return ResponseEntity.ok(jobService.getAllJobs());
+    }
 
-  const JobCard({
-    super.key,
-    required this.title,
-    required this.customer,
-    required this.price,
-    required this.onTap,
-  });
+    @GetMapping("/customer/{customerId}")
+    public ResponseEntity<List<Job>> getByCustomer(@PathVariable Long customerId) {
+        return ResponseEntity.ok(jobService.getJobsByCustomer(customerId));
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF1E355B),
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        title: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        subtitle: Text("Customer: $customer", style: const TextStyle(color: Colors.white70)),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(price, style: const TextStyle(color: Color(0xFFB18E44), fontWeight: FontWeight.bold)),
-            const Icon(Icons.arrow_forward_ios, color: AppColors.accent, size: 14),
-          ],
-        ),
-        onTap: onTap,
-      ),
-    );
-  }
+    @GetMapping("/provider/{providerId}")
+    public ResponseEntity<List<Job>> getByProvider(@PathVariable Long providerId) {
+        return ResponseEntity.ok(jobService.getJobsByProvider(providerId));
+    }
+
+    @GetMapping("/status/{status}")
+    public ResponseEntity<List<Job>> getByStatus(@PathVariable String status) {
+        return ResponseEntity.ok(jobService.getJobsByStatus(status));
+    }
+
+    /**
+     * GET /api/jobs/open
+     * GET /api/jobs/open?category=Plumbing
+     * Used by the provider side to fetch jobs matching their skill.
+     */
+    @GetMapping("/open")
+    public ResponseEntity<List<Job>> getOpenJobs(
+            @RequestParam(required = false) String category) {
+        if (category != null && !category.isBlank()) {
+            return ResponseEntity.ok(jobService.getOpenJobsByCategory(category));
+        }
+        return ResponseEntity.ok(jobService.getOpenJobs());
+    }
+
+    @GetMapping("/ongoing")
+    public ResponseEntity<List<Job>> getOngoing() {
+        return ResponseEntity.ok(jobService.getOngoingJobs());
+    }
+
+    // ──── Lifecycle ───────────────────────────────────────────────────────────
+
+    @PutMapping("/{jobId}/assign")
+    public ResponseEntity<Job> assignProvider(
+            @PathVariable Long jobId,
+            @RequestBody Map<String, Object> body) {
+        Long providerId = Long.valueOf(body.get("providerId").toString());
+        Double agreedPrice = Double.valueOf(body.get("agreedPrice").toString());
+        return ResponseEntity.ok(jobService.assignProvider(jobId, providerId, agreedPrice));
+    }
+
+    @PutMapping("/{jobId}/start")
+    public ResponseEntity<Job> startJob(@PathVariable Long jobId) {
+        return ResponseEntity.ok(jobService.startJob(jobId));
+    }
+
+    @PutMapping("/{jobId}/complete")
+    public ResponseEntity<Job> completeJob(@PathVariable Long jobId) {
+        return ResponseEntity.ok(jobService.completeJob(jobId));
+    }
+
+    @PutMapping("/{jobId}/cancel")
+    public ResponseEntity<Job> cancelJob(@PathVariable Long jobId) {
+        return ResponseEntity.ok(jobService.cancelJob(jobId));
+    }
+
+    @PutMapping("/{jobId}/dispute")
+    public ResponseEntity<Job> disputeJob(@PathVariable Long jobId) {
+        return ResponseEntity.ok(jobService.disputeJob(jobId));
+    }
+
+    // ──── Bidding ─────────────────────────────────────────────────────────────
+
+    @PostMapping("/{jobId}/bids")
+    public ResponseEntity<Bid> placeBid(
+            @PathVariable Long jobId,
+            @RequestBody Bid bid) {
+        bid.setJobId(jobId);
+        return ResponseEntity.ok(jobService.placeBid(bid));
+    }
+
+    @GetMapping("/{jobId}/bids")
+    public ResponseEntity<List<Bid>> getBids(@PathVariable Long jobId) {
+        return ResponseEntity.ok(jobService.getBidsByJob(jobId));
+    }
+
+    @PutMapping("/{jobId}/bids/{bidId}/accept")
+    public ResponseEntity<Bid> acceptBid(
+            @PathVariable Long jobId,
+            @PathVariable Long bidId) {
+        return ResponseEntity.ok(jobService.acceptBid(bidId));
+    }
+
+    @PutMapping("/{jobId}/bids/{bidId}/reject")
+    public ResponseEntity<Bid> rejectBid(
+            @PathVariable Long jobId,
+            @PathVariable Long bidId) {
+        return ResponseEntity.ok(jobService.rejectBid(bidId));
+    }
+
+    @PutMapping("/{jobId}/bids/{bidId}/counter-offer")
+    public ResponseEntity<Bid> counterOffer(
+            @PathVariable Long jobId,
+            @PathVariable Long bidId,
+            @RequestBody Map<String, Object> body) {
+        Double newAmount = Double.valueOf(body.get("amount").toString());
+        String message = body.getOrDefault("message", "").toString();
+        return ResponseEntity.ok(jobService.counterBid(bidId, newAmount, message));
+    }
+
+    // ──── History (used by provider Job History screen) ───────────────────────
+
+    @GetMapping("/history/{providerId}")
+    public ResponseEntity<List<Job>> getHistory(@PathVariable Long providerId) {
+        return ResponseEntity.ok(jobService.getJobsByProvider(providerId));
+    }
 }
